@@ -1,492 +1,225 @@
 import { useState } from "react";
-import { useCart } from "../context/CartContext";
+import { Link } from "react-router-dom";
 
+import PageStatus from "../components/common/PageStatus";
+import { useCart } from "../context/useCart";
+import { getCheckoutUrl } from "../services/cart";
+import { formatMoney } from "../utils/formatMoney";
+import {
+  MAX_CART_QUANTITY,
+  MIN_CART_QUANTITY,
+  normalizeCartQuantity,
+} from "../utils/quantity";
+import { redirectToSecureUrl } from "../utils/url";
 
 function Cart() {
+  const { cart, cartLoading, removeCartLine, updateCartLine } = useCart();
+  const [updatingLine, setUpdatingLine] = useState(null);
+  const [error, setError] = useState("");
 
-    const {
-        cart,
-        cartLoading,
-        updateCartLine,
-        removeCartLine
-    } = useCart();
+  const lines = cart?.lines?.nodes ?? [];
+  const total = formatMoney(cart?.cost?.totalAmount);
 
+  async function handleQuantityChange(line, quantity) {
+    const nextQuantity = normalizeCartQuantity(quantity);
 
-    const [updatingLine, setUpdatingLine] =
-        useState(null);
-
-    const [error, setError] =
-        useState("");
-
-
-    async function handleQuantityChange(
-        line,
-        quantity
-    ) {
-
-        if (quantity < 1) {
-            return;
-        }
-
-
-        try {
-
-            setUpdatingLine(line.id);
-            setError("");
-
-
-            await updateCartLine(
-                line.id,
-                quantity
-            );
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            setError(
-                error.message ||
-                "Unable to update cart."
-            );
-
-
-        } finally {
-
-            setUpdatingLine(null);
-
-        }
-
+    if (nextQuantity === line.quantity) {
+      return;
     }
 
+    try {
+      setUpdatingLine(line.id);
+      setError("");
 
-    async function handleRemove(lineId) {
-
-        try {
-
-            setUpdatingLine(lineId);
-            setError("");
-
-
-            await removeCartLine(
-                lineId
-            );
-
-
-        } catch (error) {
-
-            console.error(error);
-
-            setError(
-                error.message ||
-                "Unable to remove product."
-            );
-
-
-        } finally {
-
-            setUpdatingLine(null);
-
-        }
-
+      await updateCartLine(line.id, nextQuantity);
+    } catch (error) {
+      setError(error.message || "Unable to update cart.");
+    } finally {
+      setUpdatingLine(null);
     }
+  }
 
+  async function handleRemove(lineId) {
+    try {
+      setUpdatingLine(lineId);
+      setError("");
 
-    function handleCheckout() {
-
-        if (!cart?.checkoutUrl) {
-            return;
-        }
-
-
-        window.location.href =
-            cart.checkoutUrl;
-
+      await removeCartLine(lineId);
+    } catch (error) {
+      setError(error.message || "Unable to remove product.");
+    } finally {
+      setUpdatingLine(null);
     }
+  }
 
-
-    /*
-     * Loading
-     */
-
-    if (cartLoading) {
-
-        return (
-            <main>
-
-                <section className="cart-section">
-
-                    <div className="container">
-
-                        <h1>
-                            Your Cart
-                        </h1>
-
-                        <p>
-                            Loading cart...
-                        </p>
-
-                    </div>
-
-                </section>
-
-            </main>
-        );
-
+  function handleCheckout() {
+    try {
+      redirectToSecureUrl(getCheckoutUrl(cart));
+    } catch (error) {
+      setError(error.message || "Unable to start checkout.");
     }
+  }
 
-
-    /*
-     * Error
-     */
-
-    if (error) {
-
-        return (
-            <main>
-
-                <section className="cart-section">
-
-                    <div className="container">
-
-                        <h1>
-                            Your Cart
-                        </h1>
-
-                        <p>
-                            {error}
-                        </p>
-
-                    </div>
-
-                </section>
-
-            </main>
-        );
-
-    }
-
-
-    /*
-     * Empty cart
-     */
-
-    if (
-        !cart ||
-        !cart.lines ||
-        cart.lines.nodes.length === 0
-    ) {
-
-        return (
-            <main>
-
-                <section className="cart-section">
-
-                    <div className="container">
-
-                        <h1>
-                            Your Cart
-                        </h1>
-
-                        <p>
-                            Your cart is empty.
-                        </p>
-
-                    </div>
-
-                </section>
-
-            </main>
-        );
-
-    }
-
-
-    /*
-     * Cart
-     */
-
+  if (cartLoading) {
     return (
-        <main>
+      <PageStatus
+        className="cart-section"
+        title="Your Cart"
+        message="Loading cart..."
+      />
+    );
+  }
 
-            <section className="cart-section">
+  if (!lines.length) {
+    return (
+      <main>
+        <section className="cart-section">
+          <div className="container">
+            <div className="empty-cart">
+              <h1>Your Cart</h1>
+              <p>Your cart is empty.</p>
 
-                <div className="container">
+              <Link className="button-link" to="/products">
+                Browse Products
+              </Link>
+            </div>
+          </div>
+        </section>
+      </main>
+    );
+  }
 
-                    <div className="cart-head">
+  return (
+    <main>
+      <section className="cart-section">
+        <div className="container">
+          <div className="section-head">
+            <div>
+              <h1>Your Cart</h1>
+              <p>
+                {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "items"}
+              </p>
+            </div>
+          </div>
 
-                        <h1>
-                            Your Cart
-                        </h1>
+          {error && (
+            <p className="cart-error" role="alert">
+              {error}
+            </p>
+          )}
 
-                        <p>
-                            {cart.totalQuantity}{" "}
-                            {cart.totalQuantity === 1
-                                ? "item"
-                                : "items"}
-                        </p>
+          <div className="cart-layout">
+            <div className="cart-items">
+              {lines.map((line) => {
+                const variant = line.merchandise;
+                const product = variant?.product;
+                const isUpdating = updatingLine === line.id;
 
-                    </div>
+                if (!variant || !product) {
+                  return null;
+                }
 
+                return (
+                  <article className="cart-item" key={line.id}>
+                    <Link
+                      className="cart-item-image"
+                      to={`/products/${product.handle}`}
+                      aria-label={`View ${product.title}`}
+                    >
+                      {product.featuredImage ? (
+                        <img
+                          src={product.featuredImage.url}
+                          alt={product.featuredImage.altText || product.title}
+                          loading="lazy"
+                          decoding="async"
+                        />
+                      ) : (
+                        <span>No image</span>
+                      )}
+                    </Link>
 
-                    {error && (
+                    <div className="cart-item-content">
+                      <div>
+                        <h2>
+                          <Link to={`/products/${product.handle}`}>
+                            {product.title}
+                          </Link>
+                        </h2>
 
-                        <p className="cart-error">
-                            {error}
-                        </p>
-
-                    )}
-
-
-                    <div className="cart-items">
-
-                        {cart.lines.nodes.map(
-                            (line) => {
-
-                                const product =
-                                    line.merchandise.product;
-
-                                const variant =
-                                    line.merchandise;
-
-                                const isUpdating =
-                                    updatingLine ===
-                                    line.id;
-
-
-                                return (
-
-                                    <div
-                                        className="cart-item"
-                                        key={line.id}
-                                    >
-
-                                        {/* Image */}
-
-                                        <div className="cart-item-image">
-
-                                            {product.featuredImage && (
-
-                                                <img
-                                                    src={
-                                                        product
-                                                            .featuredImage
-                                                            .url
-                                                    }
-                                                    alt={
-                                                        product
-                                                            .featuredImage
-                                                            .altText ||
-                                                        product.title
-                                                    }
-                                                />
-
-                                            )}
-
-                                        </div>
-
-
-                                        {/* Content */}
-
-                                        <div className="cart-item-content">
-
-                                            <h2>
-                                                {product.title}
-                                            </h2>
-
-
-                                            {variant.title &&
-                                                variant.title !==
-                                                    "Default Title" && (
-
-                                                    <p>
-                                                        {
-                                                            variant.title
-                                                        }
-                                                    </p>
-
-                                                )}
-
-
-                                            {/* Price */}
-
-                                            <p>
-
-                                                {
-                                                    variant.price
-                                                        .currencyCode
-                                                }{" "}
-
-                                                {
-                                                    variant.price
-                                                        .amount
-                                                }
-
-                                            </p>
-
-
-                                            {/* Quantity */}
-
-                                            <div className="cart-item-quantity">
-
-                                                <button
-                                                    type="button"
-                                                    disabled={
-                                                        isUpdating ||
-                                                        line.quantity <=
-                                                            1
-                                                    }
-                                                    onClick={() =>
-                                                        handleQuantityChange(
-                                                            line,
-                                                            line.quantity -
-                                                                1
-                                                        )
-                                                    }
-                                                >
-                                                    -
-                                                </button>
-
-
-                                                <span>
-                                                    {
-                                                        line.quantity
-                                                    }
-                                                </span>
-
-
-                                                <button
-                                                    type="button"
-                                                    disabled={
-                                                        isUpdating
-                                                    }
-                                                    onClick={() =>
-                                                        handleQuantityChange(
-                                                            line,
-                                                            line.quantity +
-                                                                1
-                                                        )
-                                                    }
-                                                >
-                                                    +
-                                                </button>
-
-                                            </div>
-
-
-                                            {/* Remove */}
-
-                                            <button
-                                                type="button"
-                                                disabled={
-                                                    isUpdating
-                                                }
-                                                onClick={() =>
-                                                    handleRemove(
-                                                        line.id
-                                                    )
-                                                }
-                                            >
-                                                {isUpdating
-                                                    ? "Updating..."
-                                                    : "Remove"}
-                                            </button>
-
-                                        </div>
-
-
-                                        {/* Line total */}
-
-                                        <div className="cart-item-total">
-
-                                            <p>
-
-                                                {
-                                                    line.cost
-                                                        .totalAmount
-                                                        .currencyCode
-                                                }{" "}
-
-                                                {
-                                                    line.cost
-                                                        .totalAmount
-                                                        .amount
-                                                }
-
-                                            </p>
-
-                                        </div>
-
-                                    </div>
-
-                                );
-
-                            }
+                        {variant.title && variant.title !== "Default Title" && (
+                          <p>{variant.title}</p>
                         )}
+                      </div>
 
-                    </div>
+                      <p className="cart-item-price">{formatMoney(variant.price)}</p>
 
+                      <div className="cart-item-actions">
+                        <div className="cart-item-quantity">
+                          <button
+                            type="button"
+                            disabled={isUpdating || line.quantity <= MIN_CART_QUANTITY}
+                            onClick={() =>
+                              handleQuantityChange(line, line.quantity - 1)
+                            }
+                            aria-label={`Decrease quantity for ${product.title}`}
+                          >
+                            -
+                          </button>
 
-                    {/* Summary */}
+                          <span>{line.quantity}</span>
 
-                    <div className="cart-summary">
-
-                        <div>
-
-                            <p>
-                                Total Items
-                            </p>
-
-                            <p>
-                                {cart.totalQuantity}
-                            </p>
-
+                          <button
+                            type="button"
+                            disabled={isUpdating || line.quantity >= MAX_CART_QUANTITY}
+                            onClick={() =>
+                              handleQuantityChange(line, line.quantity + 1)
+                            }
+                            aria-label={`Increase quantity for ${product.title}`}
+                          >
+                            +
+                          </button>
                         </div>
-
-
-                        <div>
-
-                            <p>
-                                Total
-                            </p>
-
-                            <p>
-
-                                {
-                                    cart.cost
-                                        .totalAmount
-                                        .currencyCode
-                                }{" "}
-
-                                {
-                                    cart.cost
-                                        .totalAmount
-                                        .amount
-                                }
-
-                            </p>
-
-                        </div>
-
 
                         <button
-                            type="button"
-                            onClick={
-                                handleCheckout
-                            }
+                          type="button"
+                          className="text-button"
+                          disabled={isUpdating}
+                          onClick={() => handleRemove(line.id)}
                         >
-                            Go To Checkout
+                          {isUpdating ? "Updating..." : "Remove"}
                         </button>
-
+                      </div>
                     </div>
 
-                </div>
+                    <div className="cart-item-total">
+                      <span>Line Total</span>
+                      <strong>{formatMoney(line.cost?.totalAmount)}</strong>
+                    </div>
+                  </article>
+                );
+              })}
+            </div>
 
-            </section>
+            <aside className="cart-summary" aria-label="Cart summary">
+              <div>
+                <span>Total Items</span>
+                <strong>{cart.totalQuantity}</strong>
+              </div>
 
-        </main>
-    );
+              <div>
+                <span>Total</span>
+                <strong>{total}</strong>
+              </div>
+
+              <button type="button" className="button-primary" onClick={handleCheckout}>
+                Go To Checkout
+              </button>
+            </aside>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
 }
-
 
 export default Cart;

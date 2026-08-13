@@ -1,16 +1,38 @@
-# React + Vite
+# React Shopify Storefront
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A Vite + React storefront that reads products and carts from the Shopify Storefront API and is ready for Vercel deployment.
 
-Currently, two official plugins are available:
+## Project Structure
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+- `src/components/common` - reusable page/state components.
+- `src/components/layout` - layout-level UI such as the header.
+- `src/components/products` - product listing UI.
+- `src/context` - cart provider and cart hook.
+- `src/hooks` - data-loading hooks for pages.
+- `src/services` - Shopify and cart API access.
+- `src/utils` - formatting, storage, URL, and validation helpers.
 
-## React Compiler
+## Environment
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Create `.env` locally and configure the same variables in Vercel:
 
-## Expanding the ESLint configuration
+```env
+VITE_SHOPIFY_STORE_DOMAIN=your-store.myshopify.com
+VITE_SHOPIFY_STOREFRONT_TOKEN=your_storefront_access_token
+VITE_SHOPIFY_API_VERSION=2026-07
+```
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+Only use a Shopify Storefront access token in this client app. Shopify Admin API tokens must stay server-side and must never be exposed through `VITE_` variables.
+
+## Scripts
+
+```bash
+npm run dev
+npm run lint
+npm run build
+npm run check
+```
+
+## Deployment Notes
+
+The app includes `vercel.json` for client-side route rewrites and conservative security headers. Keep Vercel environment variables in sync with `.env.example` before promoting a deployment.

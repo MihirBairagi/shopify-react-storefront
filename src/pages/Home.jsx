@@ -1,126 +1,50 @@
-import { useEffect, useState } from "react";
-import { shopifyFetch } from "../services/shopify";
-import ProductGrid from "../components/ProductGrid";
-
+import PageStatus from "../components/common/PageStatus";
+import ProductGrid from "../components/products/ProductGrid";
+import { useProducts } from "../hooks/useProducts";
 
 function Home() {
+  const { error, loading, products } = useProducts({
+    first: 20,
+  });
 
-    const [products, setProducts] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-
-
-    useEffect(() => {
-
-        async function getProducts() {
-
-            try {
-
-                const data = await shopifyFetch(`
-                    query GetProducts {
-                        products(first: 20) {
-                            nodes {
-                                id
-                                title
-                                handle
-                                description
-
-                                featuredImage {
-                                    url
-                                    altText
-                                }
-
-                                variants(first: 10) {
-                                    nodes {
-                                        id
-                                        title
-
-                                        price {
-                                            amount
-                                            currencyCode
-                                        }
-
-                                        availableForSale
-                                    }
-                                }
-                            }
-                        }
-                    }
-                `);
-
-                setProducts(
-                    data.products.nodes
-                );
-
-            } catch (error) {
-
-                console.error(error);
-
-                setError(
-                    "Unable to load products."
-                );
-
-            } finally {
-
-                setLoading(false);
-
-            }
-        }
-
-        getProducts();
-
-    }, []);
-
-
-    if (loading) {
-
-        return (
-            <main>
-                <h2>Loading products...</h2>
-            </main>
-        );
-
-    }
-
-
-    if (error) {
-
-        return (
-            <main>
-                <h2>{error}</h2>
-            </main>
-        );
-
-    }
-
-
+  if (loading) {
     return (
-        <main>
-
-            <section className="product-listing-section">
-
-                <div className="container">
-
-                    <div className="product-listing-head">
-
-                        <h1>
-                            Home Page
-                        </h1>
-
-                    </div>
-
-
-                    <ProductGrid
-                        products={products}
-                    />
-
-                </div>
-
-            </section>
-
-        </main>
+      <PageStatus
+        className="product-listing-section"
+        title="Featured Products"
+        message="Loading products..."
+      />
     );
-}
+  }
 
+  if (error) {
+    return (
+      <PageStatus
+        className="product-listing-section"
+        title="Featured Products"
+        message={error}
+      />
+    );
+  }
+
+  return (
+    <main>
+      <section className="product-listing-section">
+        <div className="container">
+          <div className="section-head">
+            <div>
+              <h1>Featured Products</h1>
+              <p>Fresh products selected from the storefront catalog.</p>
+            </div>
+
+            <span>{products.length} products</span>
+          </div>
+
+          <ProductGrid products={products} />
+        </div>
+      </section>
+    </main>
+  );
+}
 
 export default Home;

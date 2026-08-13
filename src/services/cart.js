@@ -1,495 +1,294 @@
 import { shopifyFetch } from "./shopify";
+import { normalizeCartQuantity } from "../utils/quantity";
+import {
+  getStorageItem,
+  removeStorageItem,
+  setStorageItem,
+} from "../utils/storage";
 
 const CART_STORAGE_KEY = "shopify_cart_id";
 
-
 function getStoredCartId() {
-
-    return localStorage.getItem(
-        CART_STORAGE_KEY
-    );
+  return getStorageItem(CART_STORAGE_KEY);
 }
-
 
 function saveCartId(cartId) {
-
-    localStorage.setItem(
-        CART_STORAGE_KEY,
-        cartId
-    );
+  if (cartId) {
+    setStorageItem(CART_STORAGE_KEY, cartId);
+  }
 }
-
 
 function removeStoredCartId() {
-
-    localStorage.removeItem(
-        CART_STORAGE_KEY
-    );
+  removeStorageItem(CART_STORAGE_KEY);
 }
 
+function getUserErrorMessage(errors = []) {
+  return errors.map((error) => error.message).filter(Boolean).join(", ");
+}
+
+function ensureValidCartLine(variantId, quantity) {
+  if (!variantId) {
+    throw new Error("A product variant is required.");
+  }
+
+  return {
+    merchandiseId: variantId,
+    quantity: normalizeCartQuantity(quantity),
+  };
+}
+
+function getMutationCart(payload, operationName, { persist = true } = {}) {
+  const errors = payload?.userErrors ?? [];
+
+  if (errors.length) {
+    throw new Error(getUserErrorMessage(errors));
+  }
+
+  const cart = payload?.cart ?? null;
+
+  if (!cart) {
+    removeStoredCartId();
+    throw new Error(`${operationName} did not return a cart.`);
+  }
+
+  if (persist) {
+    saveCartId(cart.id);
+  }
+
+  return cart;
+}
 
 const CART_FRAGMENT = `
-    id
+  id
+  checkoutUrl
+  totalQuantity
 
-    checkoutUrl
+  cost {
+    totalAmount {
+      amount
+      currencyCode
+    }
+  }
 
-    totalQuantity
+  lines(first: 100) {
+    nodes {
+      id
+      quantity
 
-    cost {
+      cost {
         totalAmount {
+          amount
+          currencyCode
+        }
+      }
+
+      merchandise {
+        ... on ProductVariant {
+          id
+          title
+
+          price {
             amount
             currencyCode
-        }
-    }
+          }
 
-    lines(first: 100) {
-        nodes {
+          product {
             id
-            quantity
+            title
+            handle
 
-            cost {
-                totalAmount {
-                    amount
-                    currencyCode
-                }
+            featuredImage {
+              url
+              altText
             }
-
-            merchandise {
-
-                ... on ProductVariant {
-
-                    id
-                    title
-
-                    price {
-                        amount
-                        currencyCode
-                    }
-
-                    product {
-                        id
-                        title
-                        handle
-
-                        featuredImage {
-                            url
-                            altText
-                        }
-                    }
-
-                }
-
-            }
+          }
         }
+      }
     }
+  }
 `;
 
-
 export async function getCart() {
+  const cartId = getStoredCartId();
 
-    const cartId = getStoredCartId();
+  if (!cartId) {
+    return null;
+  }
 
-    if (!cartId) {
-        return null;
-    }
-
-
-    const data = await shopifyFetch(
-        `
-        query GetCart($cartId: ID!) {
-
-            cart(id: $cartId) {
-
-                ${CART_FRAGMENT}
-
-            }
-
+  const data = await shopifyFetch(
+    `
+      query GetCart($cartId: ID!) {
+        cart(id: $cartId) {
+          ${CART_FRAGMENT}
         }
-        `,
-        {
-            cartId
-        }
-    );
+      }
+    `,
+    {
+      cartId,
+    },
+  );
 
+  if (!data.cart) {
+    removeStoredCartId();
+    return null;
+  }
 
-    if (!data.cart) {
-
-        removeStoredCartId();
-
-        return null;
-    }
-
-
-    return data.cart;
+  return data.cart;
 }
 
+export async function createCart(variantId, quantity = 1) {
+  const data = await shopifyFetch(
+    `
+      mutation CreateCart($input: CartInput) {
+        cartCreate(input: $input) {
+          cart {
+            ${CART_FRAGMENT}
+          }
 
-export async function createCart(
-    variantId,
-    quantity = 1
-) {
-
-    const data = await shopifyFetch(
-        `
-        mutation CreateCart(
-            $input: CartInput
-        ) {
-
-            cartCreate(
-                input: $input
-            ) {
-
-                cart {
-                    ${CART_FRAGMENT}
-                }
-
-                userErrors {
-                    field
-                    message
-                }
-
-                warnings {
-                    code
-                    message
-                }
-
-            }
-
+          userErrors {
+            field
+            message
+          }
         }
-        `,
-        {
-            input: {
-                lines: [
-                    {
-                        merchandiseId: variantId,
-                        quantity
-                    }
-                ]
-            }
-        }
-    );
+      }
+    `,
+    {
+      input: {
+        lines: [ensureValidCartLine(variantId, quantity)],
+      },
+    },
+  );
 
-
-    const errors =
-        data.cartCreate.userErrors;
-
-
-    if (errors.length) {
-
-        throw new Error(
-            errors
-                .map((error) => error.message)
-                .join(", ")
-        );
-
-    }
-
-
-    const cart =
-        data.cartCreate.cart;
-
-
-    saveCartId(cart.id);
-
-
-    return cart;
+  return getMutationCart(data.cartCreate, "Create cart");
 }
 
-export async function createCheckoutCart(
-    variantId,
-    quantity = 1
-) {
+export async function createCheckoutCart(variantId, quantity = 1) {
+  const data = await shopifyFetch(
+    `
+      mutation CreateCheckoutCart($input: CartInput) {
+        cartCreate(input: $input) {
+          cart {
+            id
+            checkoutUrl
+          }
 
-    const data = await shopifyFetch(
-        `
-        mutation CreateCheckoutCart(
-            $input: CartInput
-        ) {
-
-            cartCreate(
-                input: $input
-            ) {
-
-                cart {
-                    id
-                    checkoutUrl
-                }
-
-                userErrors {
-                    field
-                    message
-                }
-
-                warnings {
-                    code
-                    message
-                }
-
-            }
-
+          userErrors {
+            field
+            message
+          }
         }
-        `,
-        {
-            input: {
-                lines: [
-                    {
-                        merchandiseId: variantId,
-                        quantity
-                    }
-                ]
-            }
-        }
-    );
+      }
+    `,
+    {
+      input: {
+        lines: [ensureValidCartLine(variantId, quantity)],
+      },
+    },
+  );
 
-
-    const errors =
-        data.cartCreate.userErrors;
-
-
-    if (errors.length) {
-
-        throw new Error(
-            errors
-                .map((error) => error.message)
-                .join(", ")
-        );
-
-    }
-
-
-    return data.cartCreate.cart;
+  return getMutationCart(data.cartCreate, "Create checkout cart", {
+    persist: false,
+  });
 }
 
-export async function addToCart(
-    variantId,
-    quantity = 1
-) {
+export async function addToCart(variantId, quantity = 1) {
+  const existingCart = await getCart();
 
-    const existingCart =
-        await getCart();
+  if (!existingCart) {
+    return createCart(variantId, quantity);
+  }
 
+  const data = await shopifyFetch(
+    `
+      mutation AddToCart($cartId: ID!, $lines: [CartLineInput!]!) {
+        cartLinesAdd(cartId: $cartId, lines: $lines) {
+          cart {
+            ${CART_FRAGMENT}
+          }
 
-    if (!existingCart) {
-
-        return createCart(
-            variantId,
-            quantity
-        );
-
-    }
-
-
-    const data = await shopifyFetch(
-        `
-        mutation AddToCart(
-            $cartId: ID!
-            $lines: [CartLineInput!]!
-        ) {
-
-            cartLinesAdd(
-                cartId: $cartId
-                lines: $lines
-            ) {
-
-                cart {
-                    ${CART_FRAGMENT}
-                }
-
-                userErrors {
-                    field
-                    message
-                }
-
-                warnings {
-                    code
-                    message
-                }
-
-            }
-
+          userErrors {
+            field
+            message
+          }
         }
-        `,
-        {
-            cartId: existingCart.id,
+      }
+    `,
+    {
+      cartId: existingCart.id,
+      lines: [ensureValidCartLine(variantId, quantity)],
+    },
+  );
 
-            lines: [
-                {
-                    merchandiseId: variantId,
-                    quantity
-                }
-            ]
-        }
-    );
-
-
-    const errors =
-        data.cartLinesAdd.userErrors;
-
-
-    if (errors.length) {
-
-        throw new Error(
-            errors
-                .map((error) => error.message)
-                .join(", ")
-        );
-
-    }
-
-
-    return data.cartLinesAdd.cart;
+  return getMutationCart(data.cartLinesAdd, "Add to cart");
 }
 
+export async function updateCartLine(lineId, quantity) {
+  const cartId = getStoredCartId();
 
-export async function updateCartLine(
-    lineId,
-    quantity
-) {
+  if (!cartId || !lineId) {
+    return null;
+  }
 
-    const cartId =
-        getStoredCartId();
+  const data = await shopifyFetch(
+    `
+      mutation UpdateCartLine($cartId: ID!, $lines: [CartLineUpdateInput!]!) {
+        cartLinesUpdate(cartId: $cartId, lines: $lines) {
+          cart {
+            ${CART_FRAGMENT}
+          }
 
-
-    if (!cartId) {
-        return null;
-    }
-
-
-    const data = await shopifyFetch(
-        `
-        mutation UpdateCartLine(
-            $cartId: ID!
-            $lines: [CartLineUpdateInput!]!
-        ) {
-
-            cartLinesUpdate(
-                cartId: $cartId
-                lines: $lines
-            ) {
-
-                cart {
-                    ${CART_FRAGMENT}
-                }
-
-                userErrors {
-                    field
-                    message
-                }
-
-                warnings {
-                    code
-                    message
-                }
-
-            }
-
+          userErrors {
+            field
+            message
+          }
         }
-        `,
+      }
+    `,
+    {
+      cartId,
+      lines: [
         {
-            cartId,
+          id: lineId,
+          quantity: normalizeCartQuantity(quantity),
+        },
+      ],
+    },
+  );
 
-            lines: [
-                {
-                    id: lineId,
-                    quantity
-                }
-            ]
-        }
-    );
-
-
-    const errors =
-        data.cartLinesUpdate.userErrors;
-
-
-    if (errors.length) {
-
-        throw new Error(
-            errors
-                .map((error) => error.message)
-                .join(", ")
-        );
-
-    }
-
-
-    return data.cartLinesUpdate.cart;
+  return getMutationCart(data.cartLinesUpdate, "Update cart line");
 }
 
+export async function removeCartLine(lineId) {
+  const cartId = getStoredCartId();
 
-export async function removeCartLine(
-    lineId
-) {
+  if (!cartId || !lineId) {
+    return null;
+  }
 
-    const cartId =
-        getStoredCartId();
+  const data = await shopifyFetch(
+    `
+      mutation RemoveCartLine($cartId: ID!, $lineIds: [ID!]!) {
+        cartLinesRemove(cartId: $cartId, lineIds: $lineIds) {
+          cart {
+            ${CART_FRAGMENT}
+          }
 
-
-    if (!cartId) {
-        return null;
-    }
-
-
-    const data = await shopifyFetch(
-        `
-        mutation RemoveCartLine(
-            $cartId: ID!
-            $lineIds: [ID!]!
-        ) {
-
-            cartLinesRemove(
-                cartId: $cartId
-                lineIds: $lineIds
-            ) {
-
-                cart {
-                    ${CART_FRAGMENT}
-                }
-
-                userErrors {
-                    field
-                    message
-                }
-
-                warnings {
-                    code
-                    message
-                }
-
-            }
-
+          userErrors {
+            field
+            message
+          }
         }
-        `,
-        {
-            cartId,
+      }
+    `,
+    {
+      cartId,
+      lineIds: [lineId],
+    },
+  );
 
-            lineIds: [
-                lineId
-            ]
-        }
-    );
-
-
-    const errors =
-        data.cartLinesRemove.userErrors;
-
-
-    if (errors.length) {
-
-        throw new Error(
-            errors
-                .map((error) => error.message)
-                .join(", ")
-        );
-
-    }
-
-
-    return data.cartLinesRemove.cart;
+  return getMutationCart(data.cartLinesRemove, "Remove cart line");
 }
-
 
 export function getCheckoutUrl(cart) {
-
-    return cart?.checkoutUrl || "";
+  return cart?.checkoutUrl || "";
 }
