@@ -96,10 +96,10 @@ function Cart() {
           <div className="section-head">
             <div>
               <h1>Your Cart</h1>
-              <p>
-                {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "items"}
-              </p>
             </div>
+            <p>
+              {cart.totalQuantity} {cart.totalQuantity === 1 ? "item" : "items"}
+            </p>
           </div>
 
           {error && (
@@ -192,7 +192,7 @@ function Cart() {
                     </div>
 
                     <div className="cart-item-total">
-                      <span>Line Total</span>
+                      {/* <span> Total</span> */}
                       <strong>{formatMoney(line.cost?.totalAmount)}</strong>
                     </div>
                   </article>
