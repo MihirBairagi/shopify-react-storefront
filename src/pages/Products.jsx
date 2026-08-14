@@ -34,7 +34,7 @@ function Products() {
           <div className="section-head">
             <div>
               <h1>Products</h1>
-              <p>Browse the complete storefront catalog.</p>
+              <p>This is the all products page.</p>
             </div>
 
             <span>

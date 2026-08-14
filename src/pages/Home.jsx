@@ -34,7 +34,7 @@ function Home() {
           <div className="section-head">
             <div>
               <h1>Featured Products</h1>
-              <p>Fresh products selected from the storefront catalog.</p>
+              <p>This is Homepage description</p>
             </div>
 
             <span>{products.length} products</span>
